@@ -20,138 +20,18 @@ from torch.utils.data import Dataset, DataLoader
 
 sys.path.append(os.path.join("/home/gbobrovskih/neurodata/Minkowski"))
 from Minkowski.examples.minkunet import MinkUNet34C
+from 
 import MinkowskiEngine as ME
 import nibabel as nib
 import pandas as pd
-import json
 
-
-# 1) Inference
-# 4) Использовать фичи, внести в эксперимент
-# 5) Использовать координаты как фичи, внести в эксперимент
-
-# Plans for week:
-# 1) Нормализовать интенсиваность
-# 2) Проверить облака точек до и после функции хеширования
-
-# Plans for future
-# 1) Информация по мозгам. Соблюдение распределений. Имеет ли смысл?
-#
-
-
-def load_nii_to_array(nii_path):
-    """
-    Function returns np.array data from the *.nii file
-    :params nii_path: str, path to *.nii file with data
-    :outputs data: np.array,  data obtained from nii_path
-    """
-
-    try:
-        data = np.asanyarray(nib.load(nii_path).dataobj)
-        return (data)
-
-    except OSError:
-        print(FileNotFoundError(f'No such file or no access: {nii_path}'))
-        return('')
-
-class Brains(Dataset):
-    def __init__(
-        self, 
-        task = 'train',
-        data_dict = None):
-        self.task = task
-        if task == "train":
-            self.data_dict = data_dict 
-            
-    def __len__(self):
-        return len(self.data_dict['t1_brains'])
-    
-    def __getitem__(self, idx):
-        single_data_dict = {key: self.data_dict[key][idx] for key in self.data_dict}
-        for key in single_data_dict:
-            single_data_dict[key] = load_nii_to_array(
-                single_data_dict[key])
-        size = single_data_dict['t1_brains'].shape
-        grid_x, grid_y, grid_z = np.meshgrid(
-            np.array(range(size[0])),
-            np.array(range(size[1])),
-            np.array(range(size[2])),
-            indexing = 'ij'
-        )
-        point_cloud = np.concatenate(
-            [
-                np.expand_dims(grid_x,-1),
-                np.expand_dims(grid_y,-1),
-                np.expand_dims(grid_z,-1),
-            ]
-            + [
-                np.expand_dims(single_data_dict[key],-1)
-                for key in single_data_dict
-                if key != "labels"
-            ],
-            -1,
-        )
-    
-        point_cloud_fcd = point_cloud[
-            (single_data_dict["labels"] == 1) & (single_data_dict["t1_brains"] > 0.01), :]
-        
-        pc_brain_without_fcd_noair = point_cloud[
-            (single_data_dict["labels"] == 0) & (single_data_dict["t1_brains"] > 0.01), :]
-
-        without_fcd_shape = pc_brain_without_fcd_noair.shape[0]
-        without_fcd_noair_shape = pc_brain_without_fcd_noair.shape[0]
-
-        pcd = np.concatenate([point_cloud_fcd, pc_brain_without_fcd_noair])
-        
-        random_idxs = np.random.choice(pcd.shape[0], size = 200000, replace = False)
-        coords = pcd[:,:3][random_idxs] #n * 3
-        feats = pcd[:,3:][random_idxs] #n * 4
-        labels = np.array([1] * point_cloud_fcd.shape[0] + [0] * without_fcd_shape)[random_idxs] # n 
-        
-        coords, feats, labels = ME.utils.sparse_quantize(
-             coordinates=coords,
-             features=feats,
-             labels=labels, 
-            quantization_size = 1 
-            )   
-        
-        '''mapping = ME.utils.sparse_quantize(
-            coordinates=coords,
-            return_index=True)'''
-     
-        return coords, feats, labels
-
-def contrast_f(pred,label):
-    p_in = np.sum(pred*label) / np.sum(label) # fcd true pred/ fcd real 
-    p_out = np.sum(pred*(1 - label)) / np.sum(1-label) # fcd false / no fcd
-    return (p_in - p_out) / (p_in + p_out)
-
-def top10_f(pred,label,coords, crop_size = 32):
-    """
-        pred - (N,)
-        label - (N,)
-        coords = (N, 3)
-    """
-    df = pd.DataFrame({'pred':pred,'label':label,'coord1':coords[:,0],'coord2':coords[:,1],'coord3':coords[:,2]})
-    
-    for i in range(1,4):
-        df[f'coord{i}'] = df[f'coord{i}'] // crop_size
-
-    df = df.groupby([f'coord{i}' for i in range(1,4)]).mean().reset_index()
-    df.label = 1 - df.label
-
-    df = df.sort_values(['pred','label'], ascending = False).reset_index(drop = True).head(10)
-    df = df[df.label!=1]
-    if df.shape[0] == 0:
-        top10 = 0.0
-    else:
-        top10 = 1 - float(df.head(1).index.values[0]) / 10
-    return top10
-
+from dataset import Brains
+from utils import top10_f, contrast_f
 
 def main(config, train_dict, test_dict):
     # 4 features, 3 coordinates, 2 outputs (binary segmentation)
     device = torch.device(config.device)
+    
     net = MinkUNet34C(2, 2, D = 3) ### try 1 feature and all points 
     net = net.to(device)
 
@@ -161,7 +41,10 @@ def main(config, train_dict, test_dict):
         momentum=config.momentum,
         weight_decay=config.weight_decay)
 
-    loader = Brains(data_dict = train_dict)
+
+    #TODO: comment on purpose of the following piece of code:
+    #---------------------------
+    loader = Brains(data_dict=train_dict)
     feats_sum = np.zeros(len(FEATURES))
     feats_squared_sum =  np.zeros(len(FEATURES))
     num_batches = 0
@@ -192,10 +75,8 @@ def main(config, train_dict, test_dict):
     print('min', min_f)'''
     print('MEAN', mean)
     print('STD', std)
-   
-    # Dataset, data loader
-    train_dataset = Brains(data_dict = train_dict)
-    
+    #--------------------------
+
     # get weights for crossentropy
     labelss = []
     for data in train_dataset:
@@ -206,8 +87,9 @@ def main(config, train_dict, test_dict):
     print('Weights are', weights)
     criterion = torch.nn.CrossEntropyLoss(torch.tensor(weights).float().to(device))
     
-    test_dataset = Brains(data_dict = test_dict)
-
+    # Dataset, data loader
+    train_dataset = Brains(data_dict=train_dict)
+    test_dataset = Brains(data_dict=test_dict)
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=config.batch_size,
@@ -223,9 +105,10 @@ def main(config, train_dict, test_dict):
         #num_workers=6
     )
 
-
     for epoch in range(config.max_epochs):
         accum_loss, accum_iter = 0, 0
+
+        #TODO: random seed: what for?
         np.random.seed()
         train_iter = iter(train_dataloader)
         with experiment.train():
@@ -248,9 +131,8 @@ def main(config, train_dict, test_dict):
 
                 accum_loss += loss.item()
                 accum_iter += 1
-
-
-            experiment.log_metric(name = 'loss', value = accum_loss / accum_iter, epoch=epoch)
+            if config.log:
+                experiment.log_metric(name = 'loss', value = accum_loss / accum_iter, epoch=epoch)
         
         with experiment.test():
             #validation
@@ -297,7 +179,8 @@ def main(config, train_dict, test_dict):
 
                     accum_loss += loss.item()
                     accum_iter += 1
-                experiment.log_metric(name = 'loss', value = accum_loss / accum_iter, epoch=epoch)
+                if config.log:
+                    experiment.log_metric(name = 'loss', value = accum_loss / accum_iter, epoch=epoch)
                 num_test_brains = len(test_dataset)
                 preds = np.concatenate(preds)
                 labelss = np.concatenate(labelss)
@@ -321,6 +204,7 @@ def main(config, train_dict, test_dict):
         if epoch % 50:
             torch.save(net.state_dict(), 'saved_models/Model_t1_t2_numbers_200k_test')
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', default='cuda:1', type=str)
@@ -329,9 +213,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', default=0.1, type=float)
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--weight_decay', type=float, default=1e-4)
-       
-
-
+    parser.add_argument('--log', type=int, default=1) 
 
     config = parser.parse_args()
     
@@ -340,32 +222,17 @@ if __name__ == '__main__':
     FEATURES = ['t1_brains', 't2_brains']
     path_to_data = f"{PREFIX}data"
     
-
-
-    
-    
     #path_to_allowed_subjects = f'{PREFIX}data/table_data/valid_preprocessed_data.csv'
     #allowed_subjects = np.load(path_to_allowed_subjects, allow_pickle=True).tolist()
-    
    
-    allowed_subjects = ['1', '2', '4', '5', '7', '8', '10', '11', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '26', '27', '28',
-                         '29', '30', '31', '32', '34', '35', '36', '38', '39', '40', '41', '42', '44', '45', '46', '48', '49', '50', '51', '52', '53', '59',
-                        '60', '61', '76', '82', '83']
-    #allowed_subjects = ['15', '22', '31', '35', '44', '52', '59', '60', '61', '76']
-    #allowed_subjects = ['60']
+    allowed_subjects = ["1", "4", "5", "6", "7", "8", "9", "10", "11", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "25", "26", "27", "28", "29", "32", "35", "36", "37", "39", "40", "41", "42", "45", "47", "48", "49", "50", "51", "52", "53", "54", "55", "57", "58", "59", "60", "61", "61", "76", "83", "2", "3", "23", "24", "30", "31", "33", "34", "38", "43", "44", "46", "82"]
     train_dict = {}
     test_dict = {}
     for feature in FEATURES:
-        train_dict[feature] = [f"{path_to_data}/{feature}/{subject}.nii.gz" for subject in allowed_subjects[:-10]]
-        test_dict[feature] = [f"{path_to_data}/{feature}/{subject}.nii.gz" for subject in allowed_subjects[-10:]]
-    train_dict['labels'] = [f"{path_to_data}/labels/{subject}.nii.gz" for subject in allowed_subjects[:-10]]
-    test_dict['labels'] = [f"{path_to_data}/labels/{subject}.nii.gz"  for subject in allowed_subjects[-10:]]
+        train_dict[feature] = [f"{path_to_data}/{feature}/{subject}.nii.gz" for subject in allowed_subjects[:-13]]
+        test_dict[feature] = [f"{path_to_data}/{feature}/{subject}.nii.gz" for subject in allowed_subjects[-13:]]
+    train_dict['labels'] = [f"{path_to_data}/labels/{subject}.nii.gz" for subject in allowed_subjects[:-13]]
+    test_dict['labels'] = [f"{path_to_data}/labels/{subject}.nii.gz"  for subject in allowed_subjects[-13:]]
     print(test_dict)
-    
-    '''for feature in FEATURES:
-        train_dict[feature] = [f"{path_to_data}/{feature}/n21.nii"]
-        test_dict[feature] = [f"{path_to_data}/{feature}/n21.nii" ]
-    train_dict['labels'] = [f"{path_to_data}/labels/n21.nii"]
-    test_dict['labels'] = [f"{path_to_data}/labels/n21.nii"]'''
 
     main(config, train_dict,test_dict)

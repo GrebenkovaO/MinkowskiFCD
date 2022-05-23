@@ -81,6 +81,13 @@ class AttentionBlock(nn.Module):
         return out
 
 
+class IdentityAttention(nn.Module):
+    def __init__(self):
+        super(IdentityAttention, self).__init__()
+
+    def forward(self, gate, skip_connection):
+        return gate
+
 
 class MinkUNetBase(ResNetBase):
     BLOCK = None
@@ -94,8 +101,9 @@ class MinkUNetBase(ResNetBase):
     # To use the model, must call initialize_coords before forward pass.
     # Once data is processed, call clear to reset the model before calling
     # initialize_coords
-    def __init__(self, in_channels, out_channels, D=3):
+    def __init__(self, in_channels, out_channels, D=3, attention=False):
         ResNetBase.__init__(self, in_channels, out_channels, D)
+        self.attention = attention
 
     def network_initialization(self, in_channels, out_channels, D):
         # Output of the first conv concated to conv6
@@ -137,8 +145,10 @@ class MinkUNetBase(ResNetBase):
             self.inplanes, self.PLANES[4], kernel_size=2, stride=2, dimension=D)
         self.bntr4 = ME.MinkowskiBatchNorm(self.PLANES[4])
         
-        #self.Att0 = AttentionBlock(F_g=self.PLANES[4], F_l=self.PLANES[4], n_coefficients=int(self.PLANES[4]*0.5))
-        self.Att0 = AttentionBlock(F_g=256, F_l=128, n_coefficients=128)
+        if self.attention:
+            self.Att0 = AttentionBlock(F_g=256, F_l=128, n_coefficients=128)
+        else:
+            self.Att0 = IdentityAttention()
 
         self.inplanes = self.PLANES[4] + self.PLANES[2] * self.BLOCK.expansion
         self.block5 = self._make_layer(self.BLOCK, self.PLANES[4],
@@ -147,8 +157,10 @@ class MinkUNetBase(ResNetBase):
             self.inplanes, self.PLANES[5], kernel_size=2, stride=2, dimension=D)
         self.bntr5 = ME.MinkowskiBatchNorm(self.PLANES[5])
         
-        #self.Att1 = AttentionBlock(F_g=self.PLANES[5], F_l=self.PLANES[5], n_coefficients=int(self.PLANES[5]*0.5))
-        self.Att1 = AttentionBlock(F_g=128, F_l=64, n_coefficients=64)
+        if self.attention:
+            self.Att1 = AttentionBlock(F_g=128, F_l=64, n_coefficients=64)
+        else:
+            self.Att1 = IdentityAttention()
 
         self.inplanes = self.PLANES[5] + self.PLANES[1] * self.BLOCK.expansion
         self.block6 = self._make_layer(self.BLOCK, self.PLANES[5],
@@ -157,8 +169,10 @@ class MinkUNetBase(ResNetBase):
             self.inplanes, self.PLANES[6], kernel_size=2, stride=2, dimension=D)
         self.bntr6 = ME.MinkowskiBatchNorm(self.PLANES[6])
         
-        #self.Att2 = AttentionBlock(F_g=self.PLANES[6], F_l=self.PLANES[6], n_coefficients=int(self.PLANES[6]*0.5))
-        self.Att2 = AttentionBlock(F_g=96, F_l=32, n_coefficients=32)
+        if self.attention:
+            self.Att2 = AttentionBlock(F_g=96, F_l=32, n_coefficients=32)
+        else:
+            self.Att2 = IdentityAttention()
 
         self.inplanes = self.PLANES[6] + self.PLANES[0] * self.BLOCK.expansion
         self.block7 = self._make_layer(self.BLOCK, self.PLANES[6],
@@ -167,8 +181,10 @@ class MinkUNetBase(ResNetBase):
             self.inplanes, self.PLANES[7], kernel_size=2, stride=2, dimension=D)
         self.bntr7 = ME.MinkowskiBatchNorm(self.PLANES[7])
         
-        #self.Att3 = AttentionBlock(F_g=self.PLANES[7], F_l=self.PLANES[7], n_coefficients=int(self.PLANES[7]*0.5))
-        self.Att3 = AttentionBlock(F_g=96, F_l=32, n_coefficients=32)
+        if self.attention:
+            self.Att3 = AttentionBlock(F_g=96, F_l=32, n_coefficients=32)
+        else:
+            self.Att3 = IdentityAttention()
 
         self.inplanes = self.PLANES[7] + self.INIT_DIM
         self.block8 = self._make_layer(self.BLOCK, self.PLANES[7],
@@ -212,6 +228,7 @@ class MinkUNetBase(ResNetBase):
         out = self.convtr4p16s2(out)
         out = self.bntr4(out)
         out = self.relu(out)
+
         att0 = self.Att0(gate=out, skip_connection=out_b3p8)
         out = ME.cat(att0, out)
         out = self.block5(out)

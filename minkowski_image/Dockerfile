@@ -10,13 +10,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends wget
 RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-keyring_1.0-1_all.deb
 RUN dpkg -i cuda-keyring_1.0-1_all.deb
 
-RUN wget https://github.com/GrebenkovaO/MinkowskiFCD/requirements.txt
+RUN wget https://raw.githubusercontent.com/GrebenkovaO/MinkowskiFCD/main/requirements.txt
 RUN apt update && apt install python3-pip -y
-RUN apt install build-essential python3-dev libopenblas-dev -y
+RUN apt install build-essential python3-dev libopenblas-dev git vim -y
 RUN apt update --fix-missing && apt install ffmpeg libsm6 libxext6  -y
 
 RUN pip3 install --upgrade pip && \
     pip3 install -r requirements.txt
 
-RUN git clone https://github.com/NVIDIA/MinkowskiEngine && cd MinkowskiEngine
-RUN python3 setup.py install && cd /
+RUN git clone https://github.com/NVIDIA/MinkowskiEngine && cd MinkowskiEngine && \
+    ls ./ && python3 setup.py install && cd /
+

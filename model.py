@@ -89,7 +89,7 @@ class IdentityAttention(nn.Module):
         return gate
 
 
-class MinkUNetBase(ResNetBase):
+class MinkUNetBaseAttention(ResNetBase):
     BLOCK = None
     PLANES = None
     DILATIONS = (1, 1, 1, 1, 1, 1, 1, 1)
@@ -263,68 +263,7 @@ class MinkUNetBase(ResNetBase):
         return self.final(out)
 
 
-class MinkUNet14(MinkUNetBase):
-    BLOCK = BasicBlock
-    LAYERS = (1, 1, 1, 1, 1, 1, 1, 1)
-
-
-class MinkUNet18(MinkUNetBase):
-    BLOCK = BasicBlock
-    LAYERS = (2, 2, 2, 2, 2, 2, 2, 2)
-
-
-class MinkUNet34(MinkUNetBase):
-    BLOCK = BasicBlock
-    LAYERS = (2, 3, 4, 6, 2, 2, 2, 2)
-
-
-class MinkUNet50(MinkUNetBase):
-    BLOCK = Bottleneck
-    LAYERS = (2, 3, 4, 6, 2, 2, 2, 2)
-
-
-class MinkUNet101(MinkUNetBase):
-    BLOCK = Bottleneck
-    LAYERS = (2, 3, 4, 23, 2, 2, 2, 2)
-
-
-class MinkUNet14A(MinkUNet14):
-    PLANES = (32, 64, 128, 256, 128, 128, 96, 96)
-
-
-class MinkUNet14B(MinkUNet14):
-    PLANES = (32, 64, 128, 256, 128, 128, 128, 128)
-
-
-class MinkUNet14C(MinkUNet14):
-    PLANES = (32, 64, 128, 256, 192, 192, 128, 128)
-
-
-class MinkUNet14D(MinkUNet14):
-    PLANES = (32, 64, 128, 256, 384, 384, 384, 384)
-
-
-class MinkUNet18A(MinkUNet18):
-    PLANES = (32, 64, 128, 256, 128, 128, 96, 96)
-
-
-class MinkUNet18B(MinkUNet18):
-    PLANES = (32, 64, 128, 256, 128, 128, 128, 128)
-
-
-class MinkUNet18D(MinkUNet18):
-    PLANES = (32, 64, 128, 256, 384, 384, 384, 384)
-
-
-class MinkUNet34A(MinkUNet34):
-    PLANES = (32, 64, 128, 256, 256, 128, 64, 64)
-
-
-class MinkUNet34B(MinkUNet34):
-    PLANES = (32, 64, 128, 256, 256, 128, 64, 32)
-
-
-class MinkUNet34C(MinkUNet34):
+class MinkUNet34CAttention(MinkUNetBaseAttention):
     PLANES = (32, 64, 128, 256, 256, 128, 96, 96)
 
 

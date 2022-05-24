@@ -22,7 +22,6 @@ sys.path.append(os.path.join('/home/neurodata/Minkowski'))
 from examples.minkunet import MinkUNet34C
 import MinkowskiEngine as ME
 import nibabel as nib
-import pandas as pd
 
 from dataset import Brains
 from utils import top10_f, contrast_f, get_statistics
@@ -47,11 +46,12 @@ def main(config, train_dict, test_dict):
 
     train_dataset = Brains(data_dict=train_dict, num_points=config.num_points)
     # get mean, std and weights for crossentropy
-    mean, std, weights = get_statistics(train_dataset, num_features=len(FEATURES))
     if not config.compute_statistics:
         mean = torch.Tensor(MEAN).float()
         std = torch.Tensor(STD).float()
         weights = torch.Tensor(WEIGHTS).float()
+    else:
+        mean, std, weights = get_statistics(train_dataset, num_features=len(FEATURES))
     
     print('Weights are', weights)
     criterion = torch.nn.CrossEntropyLoss(weights.to(device))
@@ -173,6 +173,7 @@ if __name__ == '__main__':
     parser.add_argument('--weight_decay', type=float, default=1e-4)
     parser.add_argument('--num_points', type=int, default=200000)
     parser.add_argument('--compute_statistics', type=int, default=0)
+    parser.add_argument('--save_each_step', type=int, default=5)
     parser.add_argument('--log', type=int, default=1) 
 
     config = parser.parse_args()

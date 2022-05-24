@@ -86,7 +86,7 @@ class IdentityAttention(nn.Module):
         super(IdentityAttention, self).__init__()
 
     def forward(self, gate, skip_connection):
-        return gate
+        return skip_connection
 
 
 class MinkUNetBaseAttention(ResNetBase):
@@ -104,7 +104,7 @@ class MinkUNetBaseAttention(ResNetBase):
     def __init__(self, in_channels, out_channels, D=3, attention=False):
         self.attention = attention
         ResNetBase.__init__(self, in_channels, out_channels, D)
-        print('MinkUNet' + 'with attention'*self.attention) 
+        print('MinkUNet' + ' with attention'*self.attention) 
 
     def network_initialization(self, in_channels, out_channels, D):
         # Output of the first conv concated to conv6
@@ -200,6 +200,7 @@ class MinkUNetBaseAttention(ResNetBase):
         self.relu = ME.MinkowskiReLU(inplace=True)
 
     def forward(self, x):
+        print('input x.shape', x.shape)
         out = self.conv0p1s1(x)
         out = self.bn0(out)
         out_p1 = self.relu(out)
@@ -231,6 +232,7 @@ class MinkUNetBaseAttention(ResNetBase):
         out = self.relu(out)
 
         att0 = self.Att0(gate=out, skip_connection=out_b3p8)
+        # out = ME.cat(out, out_b3p8)
         out = ME.cat(att0, out)
         out = self.block5(out)
 
@@ -240,6 +242,7 @@ class MinkUNetBaseAttention(ResNetBase):
         out = self.relu(out)
         
         att1 = self.Att1(gate=out, skip_connection=out_b2p4)
+        # out = ME.cat(out, out_b2p4)
         out = ME.cat(att1, out)
         out = self.block6(out)
 
@@ -249,6 +252,7 @@ class MinkUNetBaseAttention(ResNetBase):
         out = self.relu(out)
         
         att2 = self.Att2(gate=out, skip_connection=out_b1p2)
+        # out = ME.cat(out, out_b1p2)
         out = ME.cat(att2, out)
         out = self.block7(out)
 
@@ -258,11 +262,11 @@ class MinkUNetBaseAttention(ResNetBase):
         out = self.relu(out)
         
         att3 = self.Att3(gate=out, skip_connection=out_p1)
+        # out = ME.cat(out, out_p1)
         out = ME.cat(att3, out)
         out = self.block8(out)
 
         return self.final(out)
-
 
 
 class MinkUNet34Attention(MinkUNetBaseAttention):

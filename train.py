@@ -25,19 +25,22 @@ import MinkowskiEngine as ME
 import nibabel as nib
 
 from dataset import Brains
-from utils import top10_f, contrast_f, get_statistics
+from utils import top10_f, contrast_f, get_statistics, get_model_size
 
 # full dataset precomputed statistics
-MEAN = [304.884, 290.758]
-STD = [86.335, 127.093]
-WEIGHTS = [0.0015022, 0.9984978]
+MEAN2 = [304.884, 290.758]
+MEAN3 = [304.86774503, 290.75134592, 142.4693862]
+STD2 = [86.335, 127.093]
+STD3 = [86.35006108, 127.1242876, 48.30014252]
+WEIGHTS = [0.0015, 0.998]
 
 def main(config, train_dict, test_dict):
     # 4 features, 3 coordinates, 2 outputs (binary segmentation)
     device = torch.device(config.device)
     
-    net = MinkUNet34CAttention(2, 2, D = 3, attention=bool(config.attention)) ### try 1 feature and all points 
+    net = MinkUNet34CAttention(len(FEATURES), 2, D = 3, attention=bool(config.attention)) ### try 1 feature and all points 
     net = net.to(device)
+    print(get_model_size(net))
 
     optimizer = optim.SGD(
         net.parameters(),
@@ -48,9 +51,13 @@ def main(config, train_dict, test_dict):
     train_dataset = Brains(data_dict=train_dict, num_points=config.num_points)
     # get mean, std and weights for crossentropy
     if not config.compute_statistics:
-        mean = torch.Tensor(MEAN).float()
-        std = torch.Tensor(STD).float()
-        weights = torch.Tensor(WEIGHTS).float()
+        if len(FEATURES) == 2:
+            mean = torch.Tensor(MEAN2).float()
+            std = torch.Tensor(STD2).float()
+            weights = torch.Tensor(WEIGHTS).float()
+        elif len(FEATURES) == 3:
+            mean = torch.Tensor(MEAN3).float()
+            std = torch.Tensor(STD3).float()
     else:
         mean, std, weights = get_statistics(train_dataset, num_features=len(FEATURES))
     
@@ -96,7 +103,7 @@ def main(config, train_dict, test_dict):
                 optimizer.zero_grad()
                 loss = criterion(out.F.squeeze(), labels.long().to(device))
                 
-                if i % config.save_each_step == 0:
+                if i % config.print_each_step == 0:
                     print(f"Epoch {epoch} Step {i}/{len(train_dataloader)}: Train Loss is {loss.item()}")
                 loss.backward()
                 optimizer.step()
@@ -174,7 +181,7 @@ if __name__ == '__main__':
     parser.add_argument('--weight_decay', type=float, default=1e-4)
     parser.add_argument('--num_points', type=int, default=200000)
     parser.add_argument('--compute_statistics', type=int, default=0)
-    parser.add_argument('--save_each_step', type=int, default=5)
+    parser.add_argument('--print_each_step', type=int, default=5)
     parser.add_argument('--attention', type=int, default=0)
     parser.add_argument('--log', type=int, default=1) 
 
@@ -182,7 +189,7 @@ if __name__ == '__main__':
     
     PREFIX = '/home/neurodata/'
     BRAIN_TYPE = 'full'
-    FEATURES = ['t1_brains', 't2_brains']
+    FEATURES = ['t1_brains', 't2_brains', 'flair_brains']
     path_to_data = f"{PREFIX}data"
     
     #path_to_allowed_subjects = f'{PREFIX}data/table_data/valid_preprocessed_data.csv'
@@ -197,5 +204,6 @@ if __name__ == '__main__':
     train_dict['labels'] = [f"{path_to_data}/labels/{subject}.nii.gz" for subject in allowed_subjects[:-13]]
     test_dict['labels'] = [f"{path_to_data}/labels/{subject}.nii.gz"  for subject in allowed_subjects[-13:]]
     print(test_dict)
+    print(f'Features: {FEATURES}')
 
     main(config, train_dict,test_dict)

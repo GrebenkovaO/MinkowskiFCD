@@ -19,7 +19,8 @@ from urllib.request import urlretrieve
 from torch.utils.data import Dataset, DataLoader
 
 sys.path.append(os.path.join('/home/neurodata/Minkowski'))
-from examples.minkunet import MinkUNet34C
+# from examples.minkunet import MinkUNet34C
+from model import MinkUNet34CAttention
 import MinkowskiEngine as ME
 import nibabel as nib
 
@@ -35,7 +36,7 @@ def main(config, train_dict, test_dict):
     # 4 features, 3 coordinates, 2 outputs (binary segmentation)
     device = torch.device(config.device)
     
-    net = MinkUNet34C(2, 2, D = 3) ### try 1 feature and all points 
+    net = MinkUNet34CAttention(2, 2, D = 3, attention=bool(config.attention)) ### try 1 feature and all points 
     net = net.to(device)
 
     optimizer = optim.SGD(
@@ -174,6 +175,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_points', type=int, default=200000)
     parser.add_argument('--compute_statistics', type=int, default=0)
     parser.add_argument('--save_each_step', type=int, default=5)
+    parser.add_argument('--attention', type=int, default=0)
     parser.add_argument('--log', type=int, default=1) 
 
     config = parser.parse_args()

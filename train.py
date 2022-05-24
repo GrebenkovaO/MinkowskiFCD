@@ -26,7 +26,7 @@ import nibabel as nib
 import pandas as pd
 
 from dataset import Brains
-from utils import top10_f, contrast_f
+from utils import top10_f, contrast_f, get_statistcs
 
 def main(config, train_dict, test_dict):
     # 4 features, 3 coordinates, 2 outputs (binary segmentation)
@@ -45,45 +45,12 @@ def main(config, train_dict, test_dict):
     #TODO: comment on purpose of the following piece of code:
     #---------------------------
     loader = Brains(data_dict=train_dict)
-    feats_sum = np.zeros(len(FEATURES))
-    feats_squared_sum =  np.zeros(len(FEATURES))
-    num_batches = 0
-    for data in loader:
-        _, feats, _ = data
-        feats_sum += np.mean(feats, axis=0)
-        feats_squared_sum += np.mean(feats**2,  axis=0)
-        num_batches += 1
-    mean = feats_sum / num_batches
-
-    # std = sqrt(E[X^2] - (E[X])^2)
-    std = (feats_squared_sum / num_batches - mean ** 2) ** 0.5
-        
-    '''train_iter = iter(loader)
-    torch.mean(data, dim=[0,2,3])
     
-    for i, data in enumerate(train_iter):
-        coords, feats, labels = data
-        max_temp = np.max(feats, axis = 1)
-        min_temp = np.min(feats, axis = 1)
-        for i in range(len(FEATURES)):
-            if max_temp[i] > max_f[i]:
-                max_f[i] = max_temp[i]
-            if min_temp[i] < min_f[i]:
-                min_f[i] = min_temp[i]
-    
-    print('max', max_f)
-    print('min', min_f)'''
-    print('MEAN', mean)
-    print('STD', std)
     #--------------------------
 
-    # get weights for crossentropy
-    labelss = []
-    for data in train_dataset:
-        _, _, labels = data
-        labelss+=list(labels)
-    weight1 = np.mean(labelss)
-    weights = [weight1, 1 - weight1]
+    # get mean, std and weights for crossentropy
+    mean, std, weights = get_statistics(loader)
+    
     print('Weights are', weights)
     criterion = torch.nn.CrossEntropyLoss(torch.tensor(weights).float().to(device))
     

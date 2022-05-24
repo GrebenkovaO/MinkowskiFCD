@@ -263,7 +263,12 @@ class MinkUNetBaseAttention(ResNetBase):
         return self.final(out)
 
 
-class MinkUNet34CAttention(MinkUNetBaseAttention):
+
+class MinkUNet34Attention(MinkUNetBaseAttention):
+    BLOCK = BasicBlock
+    LAYERS = (2, 3, 4, 6, 2, 2, 2, 2)
+
+class MinkUNet34CAttention(MinkUNet34Attention):
     PLANES = (32, 64, 128, 256, 256, 128, 96, 96)
 
 

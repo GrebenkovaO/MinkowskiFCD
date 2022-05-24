@@ -26,6 +26,8 @@ import nibabel as nib
 
 from dataset import Brains
 from utils import top10_f, contrast_f, get_statistics, get_model_size
+from loss import FocalLoss
+
 
 # full dataset precomputed statistics
 MEAN2 = [304.884, 290.758]
@@ -62,8 +64,14 @@ def main(config, train_dict, test_dict):
         mean, std, weights = get_statistics(train_dataset, num_features=len(FEATURES))
     
     print('Weights are', weights)
-    criterion = torch.nn.CrossEntropyLoss(weights.to(device))
-    
+    if config.loss == 'bce_weighted':
+        criterion = torch.nn.CrossEntropyLoss(weights.to(device))
+    elif config.loss == 'focal_assymetric':
+        criterion = FocalLoss(assymetric=True, weight=0.99,
+                delta_focal=0.999, gamma_focal=0.2, 
+                delta_tversky=0.9, gamma_tversky=0.5
+                )
+
     # Dataset, data loader
     test_dataset = Brains(data_dict=test_dict)
     train_dataloader = DataLoader(
@@ -97,7 +105,6 @@ def main(config, train_dict, test_dict):
                 
                 # normalize features
                 feats -= mean.view(1, len(FEATURES)) / std.view(1, len(FEATURES))
-                
                 feats = feats.to(device)
                 out = net(ME.SparseTensor(feats.float(), coords, device=device))
                 optimizer.zero_grad()
@@ -183,6 +190,8 @@ if __name__ == '__main__':
     parser.add_argument('--compute_statistics', type=int, default=0)
     parser.add_argument('--print_each_step', type=int, default=5)
     parser.add_argument('--attention', type=int, default=0)
+    parser.add_argument('--loss', type=str, default='bce_weighted')
+    parser.add_argument('--num_features', type=int, default=2)
     parser.add_argument('--log', type=int, default=1) 
 
     config = parser.parse_args()
@@ -190,6 +199,7 @@ if __name__ == '__main__':
     PREFIX = '/home/neurodata/'
     BRAIN_TYPE = 'full'
     FEATURES = ['t1_brains', 't2_brains', 'flair_brains']
+    FEATURES = FEATURES[:config.num_features]
     path_to_data = f"{PREFIX}data"
     
     #path_to_allowed_subjects = f'{PREFIX}data/table_data/valid_preprocessed_data.csv'

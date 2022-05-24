@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 def asymmetric_focal_loss(y_true, y_pred, delta, gamma, epsilon=1e-7):
     y_true = F.one_hot(y_true, 2)
@@ -23,10 +24,12 @@ def asymmetric_focal_tversky_loss(y_true, y_pred, delta, gamma, epsilon=1e-7):
     loss = 1.0 - mTI_0 + torch.pow(1.0 - mTI_1, 1.0 - gamma)
     return loss
 
-def asym_unified_focal_loss(y_true, y_pred, weight=0.999, delta=0.6, gamma=0.5):
+def asym_unified_focal_loss(y_true, y_pred, weight=0.999, 
+                            delta_focal=0.6, gamma_focal=0.5,
+                            delta_tversky=0.5, gamma_tversky=1):
     # need to tune gamma [0.1, 0.9]
-    focal_loss = asymmetric_focal_loss(y_true, y_pred, delta=0.999, gamma=0.2)
-    tversky_loss = asymmetric_focal_tversky_loss(y_true, y_pred, delta=0.9, gamma=0.5)
+    focal_loss = asymmetric_focal_loss(y_true, y_pred, delta_focal, gamma_focal)
+    tversky_loss = asymmetric_focal_tversky_loss(y_true, y_pred, delta_tversky, gamma_tversky)
 
     #print("FOCAL w", weight * focal_loss)
     #print("Focal", focal_loss)
@@ -34,3 +37,27 @@ def asym_unified_focal_loss(y_true, y_pred, weight=0.999, delta=0.6, gamma=0.5):
     #print("Tversky", tversky_loss)
     loss = 100 * (focal_loss * weight + tversky_loss * (1 - weight))
     return loss
+
+
+class FocalLoss(torch.nn.Module):
+    def __init__(self, assymetric=False, weight=1, 
+                 delta_focal=0.5, gamma_focal=1, 
+                 delta_tversky=0.5, gamma_tversky=1):
+        super(FocalLoss,self).__init__()
+        self.assymetric = assymetric
+        # focal: delta=0.999, gamma=0.2 tversky_loss: delta=0.9, gamma=0.5
+        self.weight = weight
+        self.delta_focal = delta_focal
+        self.gamma_focal = gamma_focal
+        self.delta_tversky = delta_tversky
+        self.gamma_tversky = gamma_tversky
+
+    def forward(self, pred, true):
+        if self.assymetric:
+            return asym_unified_focal_loss(true, pred.softmax(dim=1), self.weight, 
+                    self.delta_focal, self.gamma_focal,
+                    self.delta_tversky, self.gamma_tversky
+                    )
+        else:
+            raise NotImplemented
+

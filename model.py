@@ -200,7 +200,6 @@ class MinkUNetBaseAttention(ResNetBase):
         self.relu = ME.MinkowskiReLU(inplace=True)
 
     def forward(self, x):
-        print('input x.shape', x.shape)
         out = self.conv0p1s1(x)
         out = self.bn0(out)
         out_p1 = self.relu(out)

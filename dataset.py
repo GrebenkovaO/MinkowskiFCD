@@ -2,7 +2,7 @@ import os
 import sys
 import numpy as np
 import nibabel as nib
-sys.path.append(os.path.join("/home/gbobrovskih/neurodata/Minkowski"))
+sys.path.append(os.path.join('/home/neurodata/Minkowski'))
 import MinkowskiEngine as ME
 from torch.utils.data import Dataset, DataLoader
 

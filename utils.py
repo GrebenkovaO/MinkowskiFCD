@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 #TODO: comment on purpose of this function
 def contrast_f(pred,label):
@@ -28,25 +29,24 @@ def top10_f(pred,label,coords, crop_size = 32):
         top10 = 1 - float(df.head(1).index.values[0]) / 10
     return top10
 
-def get_statistics(loader):
-    feats_sum = []
-    feats_squared_sum =  []
+def get_statistics(dataset, num_features):
+    feats_sum = np.zeros((num_features))
+    feats_squared_sum = np.zeros((num_features))
     labelss = []
     
-    for data in loader:
+    for data in dataset:
         _, feats, labels = data
         feats_sum += np.mean(feats, axis=0)
         feats_squared_sum += np.mean(feats**2,  axis=0)
         labelss += list(labels)
-        num_batches += 1
         
-    mean = feats_sum / len(loader)
+    mean = feats_sum / len(dataset)
     # std = sqrt(E[X^2] - (E[X])^2)
-    std = (feats_squared_sum / num_batches - mean ** 2) ** 0.5
-    print('Mean={mean}, std={std}')
+    std = (feats_squared_sum / len(dataset) - mean ** 2) ** 0.5
+    print(f'Mean={mean}, std={std}')
     
     weight1 = np.mean(labelss)
     weights = [weight1, 1 - weight1]
     print(f'Weights are {weights}')
     
-    return mean, std, weights
+    return torch.Tensor(mean).float(), torch.Tensor(std).float(), torch.Tensor(weights).float()

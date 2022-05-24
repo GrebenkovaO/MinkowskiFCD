@@ -18,15 +18,19 @@ from sklearn.metrics import recall_score
 from urllib.request import urlretrieve
 from torch.utils.data import Dataset, DataLoader
 
-sys.path.append(os.path.join("/home/gbobrovskih/neurodata/Minkowski"))
-from Minkowski.examples.minkunet import MinkUNet34C
-from 
+sys.path.append(os.path.join('/home/neurodata/Minkowski'))
+from examples.minkunet import MinkUNet34C
 import MinkowskiEngine as ME
 import nibabel as nib
 import pandas as pd
 
 from dataset import Brains
-from utils import top10_f, contrast_f, get_statistcs
+from utils import top10_f, contrast_f, get_statistics
+
+# full dataset precomputed statistics
+MEAN = [304.884, 290.758]
+STD = [86.335, 127.093]
+WEIGHTS = [0.0015022, 0.9984978]
 
 def main(config, train_dict, test_dict):
     # 4 features, 3 coordinates, 2 outputs (binary segmentation)
@@ -41,21 +45,18 @@ def main(config, train_dict, test_dict):
         momentum=config.momentum,
         weight_decay=config.weight_decay)
 
-
-    #TODO: comment on purpose of the following piece of code:
-    #---------------------------
-    loader = Brains(data_dict=train_dict)
-    
-    #--------------------------
-
+    train_dataset = Brains(data_dict=train_dict, num_points=config.num_points)
     # get mean, std and weights for crossentropy
-    mean, std, weights = get_statistics(loader)
+    mean, std, weights = get_statistics(train_dataset, num_features=len(FEATURES))
+    if not config.compute_statistics:
+        mean = torch.Tensor(MEAN).float()
+        std = torch.Tensor(STD).float()
+        weights = torch.Tensor(WEIGHTS).float()
     
     print('Weights are', weights)
-    criterion = torch.nn.CrossEntropyLoss(torch.tensor(weights).float().to(device))
+    criterion = torch.nn.CrossEntropyLoss(weights.to(device))
     
     # Dataset, data loader
-    train_dataset = Brains(data_dict=train_dict)
     test_dataset = Brains(data_dict=test_dict)
     train_dataloader = DataLoader(
         train_dataset,
@@ -81,26 +82,31 @@ def main(config, train_dict, test_dict):
         with experiment.train():
             # Training
             net.train()
-            for i, data in enumerate(train_iter):
+            for i, data in enumerate(train_dataloader):
                 coords, feats, labels = data
                 coords = coords.to(device)
                 labels = labels.to(device)
-                '''for j in range(len(FEATURES)):
-                    feats[j] = (feats[j] - min_f[j]) / (max_f[j] - min_f[j])'''
-                for j in range(len(FEATURES)):
-                    feats[j] = (feats[j] - mean[j]) / std[j]
+                
+                # normalize features
+                feats -= mean.view(1, len(FEATURES)) / std.view(1, len(FEATURES))
+                
                 feats = feats.to(device)
                 out = net(ME.SparseTensor(feats.float(), coords, device=device))
                 optimizer.zero_grad()
                 loss = criterion(out.F.squeeze(), labels.long().to(device))
+                
+                if i % config.save_each_step == 0:
+                    print(f"Epoch {epoch} Step {i}/{len(train_dataloader)}: Train Loss is {loss.item()}")
                 loss.backward()
                 optimizer.step()
 
                 accum_loss += loss.item()
                 accum_iter += 1
+                
             if config.log:
                 experiment.log_metric(name = 'loss', value = accum_loss / accum_iter, epoch=epoch)
-        
+            print(f'Epoch {epoch}: Mean Train loss is {accum_loss / accum_iter}')
+            
         with experiment.test():
             #validation
             if epoch % 5 == 0:
@@ -117,11 +123,10 @@ def main(config, train_dict, test_dict):
                     coords, feats, labels = data
                     coords = coords.to(device)
                     labels = labels.to(device)
-                    '''for j in range(len(FEATURES)):
-                        feats[j] = (feats[j] - min_f[j]) / (max_f[j] - min_f[j])'''
                     
-                    for j in range(len(FEATURES)):
-                        feats[j] = (feats[j] - mean[j]) / std[j]
+                    # normalize features
+                    feats -= mean.view(1, len(FEATURES)) / std.view(1, len(FEATURES))
+                    
                     feats = feats.to(device)
                     with torch.no_grad():
                         out = net(ME.SparseTensor(feats.float(), coords, device=device))
@@ -129,30 +134,16 @@ def main(config, train_dict, test_dict):
                         labelss.append(labels.detach().cpu().numpy().reshape(-1))
                         coordss.append(coords.detach().cpu().numpy())
                         loss = criterion(out.F.squeeze(), labels.long().to(device))
-                        '''if epoch % 395:
-                            
-                            out1 = out.F.softmax(dim = 1)[:,1].detach().cpu().numpy().reshape(-1).tolist()
-                            coords1 = coords[:,1:].detach().cpu().numpy().tolist()
-                            labels1 = labels.reshape(-1).detach().cpu().numpy().tolist()
-                            result = {'coordinates': coords1,
-                                      'predictions': out1,
-                                      'labels': labels1
-                                                         }
-                            with open(f'predictions/noquant/mapping{i}-{epoch}.json', 'w') as file:
-                                json.dump(result, file)'''
-                        
-                        
-                        
-
+                    
                     accum_loss += loss.item()
                     accum_iter += 1
                 if config.log:
                     experiment.log_metric(name = 'loss', value = accum_loss / accum_iter, epoch=epoch)
+                print(f'Epoch {epoch}: Mean Validation loss is {accum_loss / accum_iter}')
+                
                 num_test_brains = len(test_dataset)
                 preds = np.concatenate(preds)
                 labelss = np.concatenate(labelss)
-#                 print(np.argwhere(labelss == 1)[0:3])
-    #             coordss = np.concatenate(coordss, axis = 0)
                 points_in_test_brains = len(preds)//num_test_brains
                 top10 = [top10_f(preds[i*points_in_test_brains:(i+1)*points_in_test_brains],
                                        labelss[i*points_in_test_brains:(i+1)*points_in_test_brains],coordss[i]) for i in range(num_test_brains)] 
@@ -180,11 +171,13 @@ if __name__ == '__main__':
     parser.add_argument('--lr', default=0.1, type=float)
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--weight_decay', type=float, default=1e-4)
+    parser.add_argument('--num_points', type=int, default=200000)
+    parser.add_argument('--compute_statistics', type=int, default=0)
     parser.add_argument('--log', type=int, default=1) 
 
     config = parser.parse_args()
     
-    PREFIX = '/code/PointCloudResNet/'
+    PREFIX = '/home/neurodata/'
     BRAIN_TYPE = 'full'
     FEATURES = ['t1_brains', 't2_brains']
     path_to_data = f"{PREFIX}data"

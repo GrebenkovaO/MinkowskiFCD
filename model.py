@@ -102,8 +102,9 @@ class MinkUNetBaseAttention(ResNetBase):
     # Once data is processed, call clear to reset the model before calling
     # initialize_coords
     def __init__(self, in_channels, out_channels, D=3, attention=False):
-        ResNetBase.__init__(self, in_channels, out_channels, D)
         self.attention = attention
+        ResNetBase.__init__(self, in_channels, out_channels, D)
+        print('MinkUNet' + 'with attention'*self.attention) 
 
     def network_initialization(self, in_channels, out_channels, D):
         # Output of the first conv concated to conv6
@@ -272,38 +273,38 @@ class MinkUNet34CAttention(MinkUNet34Attention):
     PLANES = (32, 64, 128, 256, 256, 128, 96, 96)
 
 
-if __name__ == '__main__':
-    from tests.python.common import data_loader
-    # loss and network
-    criterion = nn.CrossEntropyLoss()
-    net = MinkUNet14A(in_channels=3, out_channels=5, D=2)
-    print(net)
+# if __name__ == '__main__':
+#     from tests.python.common import data_loader
+#     # loss and network
+#     criterion = nn.CrossEntropyLoss()
+#     net = MinkUNet14A(in_channels=3, out_channels=5, D=2)
+#     print(net)
 
-    # a data loader must return a tuple of coords, features, and labels.
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#     # a data loader must return a tuple of coords, features, and labels.
+#     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    net = net.to(device)
-    optimizer = SGD(net.parameters(), lr=1e-2)
+#     net = net.to(device)
+#     optimizer = SGD(net.parameters(), lr=1e-2)
 
-    for i in range(10):
-        optimizer.zero_grad()
+#     for i in range(10):
+#         optimizer.zero_grad()
 
-        # Get new data
-        coords, feat, label = data_loader(is_classification=False)
-        input = ME.SparseTensor(feat, coordinates=coords, device=device)
-        label = label.to(device)
+#         # Get new data
+#         coords, feat, label = data_loader(is_classification=False)
+#         input = ME.SparseTensor(feat, coordinates=coords, device=device)
+#         label = label.to(device)
 
-        # Forward
-        output = net(input)
+#         # Forward
+#         output = net(input)
 
-        # Loss
-        loss = criterion(output.F, label)
-        print('Iteration: ', i, ', Loss: ', loss.item())
+#         # Loss
+#         loss = criterion(output.F, label)
+#         print('Iteration: ', i, ', Loss: ', loss.item())
 
-        # Gradient
-        loss.backward()
-        optimizer.step()
+#         # Gradient
+#         loss.backward()
+#         optimizer.step()
 
-    # Saving and loading a network
-    torch.save(net.state_dict(), 'test.pth')
-    net.load_state_dict(torch.load('test.pth'))
+#     # Saving and loading a network
+#     torch.save(net.state_dict(), 'test.pth')
+#     net.load_state_dict(torch.load('test.pth'))

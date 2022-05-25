@@ -192,15 +192,16 @@ if __name__ == '__main__':
     parser.add_argument('--attention', type=int, default=0)
     parser.add_argument('--loss', type=str, default='bce_weighted')
     parser.add_argument('--num_features', type=int, default=2)
+    parser.add_argument('--data_dir', type=str, default='/home/data')
     parser.add_argument('--log', type=int, default=1) 
 
     config = parser.parse_args()
     
-    PREFIX = '/home/neurodata/'
+    PREFIX = config.data_dir
     BRAIN_TYPE = 'full'
     FEATURES = ['t1_brains', 't2_brains', 'flair_brains']
     FEATURES = FEATURES[:config.num_features]
-    path_to_data = f"{PREFIX}data"
+    path_to_data = f'{PREFIX}/data/data_with_gm_masks'
     
     #path_to_allowed_subjects = f'{PREFIX}data/table_data/valid_preprocessed_data.csv'
     #allowed_subjects = np.load(path_to_allowed_subjects, allow_pickle=True).tolist()

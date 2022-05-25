@@ -29,6 +29,8 @@ import MinkowskiEngine as ME
 
 from MinkowskiEngine.modules.resnet_block import BasicBlock, Bottleneck
 
+import sys 
+sys.path.append('/MinkowskiEngine')
 from examples.resnet import ResNetBase
 
 class AttentionBlock(nn.Module):

@@ -18,8 +18,6 @@ from sklearn.metrics import recall_score
 from urllib.request import urlretrieve
 from torch.utils.data import Dataset, DataLoader
 
-sys.path.append(os.path.join('/home/neurodata/Minkowski'))
-# from examples.minkunet import MinkUNet34C
 from model import MinkUNet34CAttention
 import MinkowskiEngine as ME
 import nibabel as nib
@@ -40,7 +38,7 @@ def main(config, train_dict, test_dict):
     # 4 features, 3 coordinates, 2 outputs (binary segmentation)
     device = torch.device(config.device)
     
-    net = MinkUNet34CAttention(len(FEATURES), 2, D = 3, attention=bool(config.attention)) ### try 1 feature and all points 
+    net = MinkUNet34CAttention(len(FEATURES), 2, D=3, attention=bool(config.attention))
     net = net.to(device)
     print(get_model_size(net))
 
@@ -89,7 +87,7 @@ def main(config, train_dict, test_dict):
         #num_workers=6
     )
 
-    for epoch in range(config.max_epochs):
+    for epoch in range(config.max_epochs+1):
         accum_loss, accum_iter = 0, 0
 
         #TODO: random seed: what for?
@@ -104,8 +102,8 @@ def main(config, train_dict, test_dict):
                 labels = labels.to(device)
                 
                 # normalize features
-                feats -= mean.view(1, len(FEATURES)) / std.view(1, len(FEATURES))
-                feats = feats.to(device)
+                #feats -= mean.view(1, len(FEATURES)) / std.view(1, len(FEATURES))
+                #feats = feats.to(device)
                 out = net(ME.SparseTensor(feats.float(), coords, device=device))
                 optimizer.zero_grad()
                 loss = criterion(out.F.squeeze(), labels.long().to(device))
@@ -125,8 +123,8 @@ def main(config, train_dict, test_dict):
         with experiment.test():
             #validation
             if epoch % 5 == 0:
-                torch.save(net.state_dict(), 'saved_models/Model_t1_t2_numbers_200k_test')#'saved_models/Model_10brains_test_mapping')
-                experiment.log_model("Model_full",  'saved_models/Model_t1_t2_numbers_200k_test')#'saved_models/Model_10brains_test_mapping')
+                torch.save(net.state_dict(), f'./saved_models/Model_attention={bool(config.attention)}_numfeatures={len(FEATURES)}_epoch={epoch}.pth')
+                #experiment.log_model("Model_full",  'saved_models/Model_t1_t2_numbers_200k_test')#'saved_models/Model_10brains_test_mapping')
                 np.random.seed(42)
                 accum_loss, accum_iter = 0, 0
                 test_iter = iter(test_dataloader)
@@ -140,9 +138,9 @@ def main(config, train_dict, test_dict):
                     labels = labels.to(device)
                     
                     # normalize features
-                    feats -= mean.view(1, len(FEATURES)) / std.view(1, len(FEATURES))
+                    #feats -= mean.view(1, len(FEATURES)) / std.view(1, len(FEATURES))
                     
-                    feats = feats.to(device)
+                    #feats = feats.to(device)
                     with torch.no_grad():
                         out = net(ME.SparseTensor(feats.float(), coords, device=device))
                         preds.append(out.F.softmax(dim = 1)[:,1].detach().cpu().numpy().reshape(-1))                       
@@ -174,9 +172,8 @@ def main(config, train_dict, test_dict):
                 experiment.log_metric(name = 'recall', value = recall, epoch=epoch)
                 experiment.log_metric(name = 'recall mean', value = np.mean(recalls), epoch=epoch)
         
-        if epoch % 50:
-            torch.save(net.state_dict(), 'saved_models/Model_t1_t2_numbers_200k_test')
-
+        if epoch % 10 == 0:
+            torch.save(net.state_dict(), f'./saved_models/Model_attention={bool(config.attention)}_numfeatures={len(FEATURES)}_epoch={epoch}.pth')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -201,7 +198,7 @@ if __name__ == '__main__':
     BRAIN_TYPE = 'full'
     FEATURES = ['t1_brains', 't2_brains', 'flair_brains']
     FEATURES = FEATURES[:config.num_features]
-    path_to_data = f'{PREFIX}/data/data_with_gm_masks'
+    path_to_data = f'{PREFIX}/data/data_with_gm_mask'
     
     #path_to_allowed_subjects = f'{PREFIX}data/table_data/valid_preprocessed_data.csv'
     #allowed_subjects = np.load(path_to_allowed_subjects, allow_pickle=True).tolist()
@@ -216,5 +213,6 @@ if __name__ == '__main__':
     test_dict['labels'] = [f"{path_to_data}/labels/{subject}.nii.gz"  for subject in allowed_subjects[-13:]]
     print(test_dict)
     print(f'Features: {FEATURES}')
-
+    experiment.set_name(f'unet attention={bool(config.attention)} loss={config.loss} numfeatures={len(FEATURES)}')
+    experiment.get_name()
     main(config, train_dict,test_dict)
